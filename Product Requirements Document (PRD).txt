@@ -1,0 +1,516 @@
+Product Requirements Document (PRD): JARVIS Local AI Assistant (Refined)
+Okay, this is a very well-structured and detailed PRD! It provides a strong foundation for the JARVIS project. My refinements will focus on enhancing clarity, ensuring consistency, adding a few details that might be beneficial, and highlighting areas for future consideration.
+Here's a refined version of your Product Requirements Document:
+
+Product Requirements Document (PRD): JARVIS Local AI Assistant (Refined)
+Change Log:
+v1.1 (Current): Refinements based on review. Key changes include consistent definition of memory types, added detail to success criteria, NFRs, risks, and future considerations.
+v1.0: Initial PRD.
+1. Overview
+Project Name: JARVIS
+Objective: Build a local, scalable personal AI assistant inspired by Iron Man’s JARVIS, capable of orchestrating multiple LLMs for agentic behavior, executing tasks, and managing long- and short-term memory for a single user. The system will run entirely on local Docker containers, using Ollama for LLMs and Supabase for database storage, with Python as the primary language.
+Scope:
+Core functionality: Orchestrate local LLMs (starting with a specific Llama3.2 variant) for task-specific agents, process user input (initially text-based), execute function calls, and manage memory.
+Infrastructure: Dockerized services (Ollama, Supabase, application).
+Focus: Backend logic, LLM orchestration, and memory management for one user.
+Future (Deferred): Multi-user support, UI (Web, CLI, or other), expanded input modalities.
+Key Features:
+LLM orchestration via LangGraph for agentic workflows.
+Local Llama3.2 (via Ollama, e.g., 8B instruct model, quantized) for primary intelligence, input structuring, and decision-making.
+Local Supabase (PostgreSQL with pgvector) for robust long-term memory storage and retrieval.
+In-memory state management (via LangGraph) for short-term conversational context.
+Dockerized microservices (MCP servers) for scalable and isolated task execution (e.g., file system operations, utility functions).
+Python-driven development for flexibility and maintainability.
+2. Goals & Success Criteria
+Goals:
+Enable effective task execution (e.g., text summarization, local file search, data analysis) via specialized LLM agents and microservices.
+Maintain conversational context (short-term memory within a session) and persist user history, preferences, and learned information (long-term memory).
+Ensure all components run locally with predictable resource overhead on defined target hardware.
+Provide a modular and scalable architecture for easily adding new agents and microservices.
+Success Criteria:
+SC1 (Performance): JARVIS processes typical user input (e.g., a request for summarization or file search), routes tasks to appropriate agents, and returns results in <5 seconds on average (benchmark hardware to be defined, e.g., 4-core CPU, 16GB RAM, SSD). Latency will be measured from input submission to response delivery.
+SC2 (Accuracy & Reliability - Initial):
+File Search Agent: Correctly identifies and lists files based on specified criteria (e.g., name, location) with >95% precision and recall on test datasets.
+Summarization Agent: Generates summaries that capture the main points of provided texts, evaluated qualitatively on a set of 10 diverse test documents.
+Task Routing: JARVIS Core correctly routes >95% of test commands to the intended agent(s).
+SC3 (Memory Persistence): Long-term memory (e.g., user preferences, past task summaries) persists across system restarts and is successfully retrieved and utilized by agents for context-aware responses in >90% of relevant test cases. Short-term memory maintains context for at least the last 5 conversational turns within a session.
+SC4 (Resource Usage & Stability): The entire Dockerized system runs stably (no crashes or critical errors for a 24-hour test period) with an active idle state consuming <2GB RAM (excluding LLM loaded memory) and overall system usage remaining <16GB RAM during typical task execution on benchmark hardware.
+SC5 (Modularity & Extensibility): New agents can be added by creating new Python modules implementing a predefined Agent interface and registering them (e.g., via configuration), without requiring modifications to the JARVIS Core orchestration logic. This process should be demonstrable.
+SC6 (Local Execution): 100% local execution of all core functionalities with no mandatory external cloud dependencies for operation.
+3. Functional Requirements
+3.1 System Architecture
+Components:
+Orchestrator (JARVIS Core): Python-based, utilizing LangGraph to manage workflows, route tasks, parse user input, and coordinate agents. Employs Llama3.2 (via Ollama) for input structuring (intent recognition, entity extraction) and high-level decision-making.
+LLM Server: Dockerized Ollama serving Llama3.2 (primary model, e.g., llama3:8b-instruct-q4_K_M) and potentially other optional secondary models for specialized tasks (e.g., a smaller model for quick classification, or a code-specific model).
+Database Server: Dockerized Supabase (PostgreSQL with pgvector extension) dedicated to long-term memory storage.
+Agents: Individual Python modules, integrated as LangGraph nodes, responsible for task-specific logic. Agents can call LLMs (via the LLM Server) or Microservices.
+Microservices (MCP Servers): Dockerized Python (FastAPI) services that execute specific, potentially resource-intensive or privileged operations (e.g., file system interactions, complex data processing, system information retrieval).
+Memory Manager: A Python module/abstraction layer responsible for interfacing with both short-term (LangGraph state) and long-term (Supabase) memory, providing CRUD operations and search functionalities.
+Data Flow:
+User input (initially text) → JARVIS Core.
+JARVIS Core (using Llama3.2) parses and structures input (identifies intent, extracts entities/parameters).
+Core routes structured tasks to specific agent(s) via a LangGraph workflow, potentially enriching with relevant long-term memory retrieved by the Memory Manager.
+Agents execute tasks:
+May call LLMs (via Ollama client) for generation, analysis, etc.
+May call Microservices (MCPs) for external actions or data.
+May interact with the Memory Manager to read/write long-term memory.
+Short-term memory (conversational state) is updated within the LangGraph state.
+Results from agents are aggregated/processed by the JARVIS Core.
+Core returns the final structured response to the user.
+Error Handling: Each component should implement error handling. Errors from Agents/MCPs are propagated to the JARVIS Core, which will decide on retries (if applicable) or formulate an error response for the user.
+Input/Output:
+User Input: Initially, plain text commands.
+System Output: Structured responses, initially as text. For complex data, a JSON representation might be used internally.
+3.2 Core Functionalities
+3.2.1 JARVIS Core (Orchestrator)
+Responsibilities:
+Receive and preprocess user input.
+Utilize Llama3.2 for intent recognition and parameter extraction.
+Dynamically route tasks to appropriate agents based on recognized intent using LangGraph.
+Manage and maintain the overall workflow state (which includes short-term memory).
+Coordinate and aggregate responses from multiple agents if a task requires it.
+Format the final output for the user.
+Handle basic error reporting from underlying components.
+Implementation:
+Python with LangGraph for graph-based stateful workflows.
+Pydantic for structured data validation (inputs, outputs, state).
+Ollama Python client for interacting with the local Llama3.2 model.
+Example: User Input: “Summarize ~/reports/annual_review.txt and tell me how many words it has.”
+Llama3.2 extracts intents and entities: [{task: "summarize", target: "~/reports/annual_review.txt"}, {task: "word_count", target: "~/reports/annual_review.txt"}].
+JARVIS Core routes to Summarization Agent and File Analysis Agent (or Utility Service via an agent).
+3.2.2 LLM Orchestration
+Responsibilities:
+Manage interactions with the Ollama LLM server.
+Dynamically select the appropriate LLM for a given task (initially primary Llama3.2, with framework for future model selection).
+Implement fallback strategies (e.g., to a different model or a simpler routine) if an LLM call fails or provides inadequate results (Future Enhancement).
+Ensure efficient and well-structured prompting for LLM calls.
+Implementation:
+Ollama Docker container serving Llama3.2 8B (e.g., llama3:8b-instruct-q4_K_M or a similar quantized variant suitable for defined hardware).
+Python client (ollama-python) for LLM queries.
+Standardized Pydantic schemas for prompt inputs and LLM outputs to ensure consistency.
+3.2.3 Agents
+Responsibilities:
+Encapsulate the logic for executing specific tasks.
+Interface with LLMs for complex reasoning or generation.
+Interface with MCP Servers for external actions or specialized computations.
+Interface with the Memory Manager for context or to store results.
+Return structured results to the JARVIS Core.
+Initial Agents (Examples):
+Summarization Agent: Takes text or a file path, uses Llama3.2 to generate a summary.
+Clarification: If file path, needs ability to read file content (potentially via File Service MCP).
+File Search Agent: Searches the local filesystem based on criteria (name, type, simple content grep if feasible). Uses File Service MCP.
+Memory Query Agent: Retrieves relevant entries from long-term memory based on current context or explicit user query.
+(New) Task Planning Agent (Conceptual): A meta-agent within the Core or a high-level agent that breaks down complex user requests into a sequence of tasks for other agents. (LangGraph itself handles some of this, but explicit planning might be useful).
+Implementation:
+Python modules, designed as LangGraph nodes.
+Pydantic for input/output data validation.
+Designed for extensibility: new agents should be easily integrated.
+3.2.4 Microservices (MCP Servers)
+Responsibilities:
+Execute tasks that are not primarily LLM-based (e.g., direct file I/O, system interactions, specific data transformations).
+Provide a clear API (REST) for agents to invoke their functionalities.
+Operate independently and be scalable/replaceable.
+Initial MCP Servers:
+File Service: Manages local file operations: read, write, list directories, get file metadata. Crucial for agents dealing with local documents.
+Clarification: Initial scope for read/write is text files. Binary or complex formats like PDF text extraction could be future enhancements to this service or a new one.
+Utility Service: Handles general system-related tasks or common utilities. Examples: get current date/time, perform basic calculations (if not done by LLM), retrieve system status (CPU/memory usage – for monitoring JARVIS itself or general queries).
+Implementation:
+Python FastAPI servers, containerized in Docker.
+Well-defined RESTful APIs with OpenAPI documentation.
+Configurable ports and endpoints.
+3.2.5 Memory Management
+Short-Term Memory (Conversational Context):
+Purpose: Maintain context within an ongoing conversation or task.
+Implementation: Managed as part of the LangGraph state (e.g., using a Pydantic model like AssistantState). Stored in-memory during an active session.
+Scope: Typically includes recent user inputs, system responses, and intermediate thoughts or results relevant to the current interaction chain.
+Example: Tracks the last N (e.g., 5-10) conversational exchanges.
+Long-Term Memory (Persistent Knowledge):
+Purpose: Store and retrieve user preferences, historical task data, learned information, and other data that needs to persist across sessions.
+Implementation: Supabase (PostgreSQL) with the pgvector extension for semantic search on text embeddings.
+Schema (Example memories table): id (UUID, PK), user_id (TEXT/UUID, fixed for single user initially), created_at (TIMESTAMPTZ), type (TEXT, e.g., 'preference', 'summary', 'note'), content (TEXT), metadata (JSONB), embedding (VECTOR).
+Embeddings: Generated using Sentence Transformers (e.g., all-MiniLM-L6-v2) for content that needs semantic retrieval.
+Example: Storing past summaries created by the user, user-defined preferences like "always save summaries to ~/summaries/".
+Memory Manager Module (Python):
+Provides an API for agents and the JARVIS Core to:
+Add new memories to LTM.
+Search LTM (keyword and semantic search).
+Update/delete LTM entries.
+Access/modify STM (though LangGraph state might be manipulated more directly).
+3.3 Non-Functional Requirements
+Performance: As per SC1 (<5s response time). LLM inference, embedding generation, and database queries are key areas for optimization.
+Scalability (Architectural): The system should be designed to allow:
+Addition of new agents and MCPs without significant re-architecture of the JARVIS Core.
+Independent scaling of MCP servers if one becomes a bottleneck (though less critical for single-user local deployment initially).
+Reliability & Robustness:
+Graceful error handling and reporting.
+Pydantic validation at all component interfaces (API, agent I/O, LLM I/O) to prevent data corruption.
+Supabase transactions for LTM integrity.
+The system should recover gracefully from transient errors where possible.
+Security (Local Context):
+All execution is local by default. No external network access unless explicitly configured for a specific agent or MCP (e.g., a future web-scraping agent).
+File system access by MCPs should be configurable and potentially restricted to user-defined directories.
+Secrets management (e.g., Supabase password) should use environment variables and .env files (not hardcoded).
+Maintainability:
+Modular Python code with clear separation of concerns.
+Comprehensive type hinting and Pydantic models.
+README documentation for setup, architecture, and development guidelines.
+Inline code comments for complex logic.
+Resource Consumption: As per SC4 (<16GB RAM target).
+Configuration:
+Key parameters (e.g., Ollama model name, ports, default directories for agents) should be configurable, ideally via environment variables or a central configuration file.
+Logging & Monitoring:
+Structured logging throughout the application (Core, Agents, MCPs).
+Log levels (DEBUG, INFO, WARNING, ERROR) configurable.
+Basic monitoring of MCP health (e.g., via health check endpoints).
+LangGraph provides some inherent traceability; this should be leveraged.
+4. Technical Specifications
+4.1 Tech Stack
+Language: Python 3.11+
+Orchestration & State Management: LangGraph
+LLM Serving: Ollama (Dockerized)
+Primary LLM: Llama3.2 8B (e.g., llama3:8b-instruct-q4_K_M or user-configurable equivalent).
+Database (LTM): Supabase (Dockerized PostgreSQL with pgvector extension)
+Microservice Framework: FastAPI (Dockerized)
+Data Validation & Modeling: Pydantic
+Embeddings Model: Sentence Transformers (e.g., all-MiniLM-L6-v2 via sentence-transformers library)
+Containerization: Docker, Docker Compose
+Key Python Dependencies: langgraph, pydantic, ollama (Python client), supabase-py, fastapi, uvicorn, sentence-transformers, psycopg2-binary (or psycopg), python-dotenv.
+4.2 Docker Setup
+Containers:
+jarvis-core: Runs the main JARVIS orchestrator application (Python + LangGraph).
+ollama: Serves the LLM(s) via port 11434.
+supabase-db: Runs PostgreSQL with pgvector extension (port 5432). (Note: Full Supabase includes other services like GoTrue, Storage, etc., but for local pgvector, only the database might be strictly needed if using supabase-py directly with DB connection string). The supabase/postgres image is good.
+mcp-file-service: FastAPI server for file operations (e.g., port 8001).
+mcp-utility-service: FastAPI server for utility tasks (e.g., port 8002).
+Docker Compose (docker-compose.yml):
+Defines all services, their builds (or images), ports, volumes (e.g., for Supabase data, Ollama models), environment variables (for configuration and secrets), and shared network for local inter-container communication.
+Specifies dependencies between services (e.g., jarvis-core depends on ollama and supabase-db).
+4.3 Directory Structure (Example)
+jarvis/
+├── .env.example              # Example environment variables
+├── docker-compose.yml        # Docker setup
+├── requirements.txt          # Python dependencies
+├── README.md                 # Project documentation
+│
+├── core/                     # JARVIS orchestrator and core logic
+│   ├── __init__.py
+│   ├── orchestrator.py       # LangGraph workflow definition
+│   ├── state.py              # Pydantic state models (e.g., AssistantState)
+│   ├── memory_manager.py     # Interface for STM and LTM
+│   ├── llm_interface.py      # Wrapper for Ollama client
+│   └── config.py             # Application configuration loading
+│
+├── agents/                   # Task-specific agents
+│   ├── __init__.py
+│   ├── base_agent.py         # (Optional) Base class or interface for agents
+│   ├── summarization_agent.py
+│   ├── file_search_agent.py
+│   └── memory_query_agent.py
+│
+├── mcp/                      # Microservices (MCP Servers)
+│   ├── file_service/
+│   │   ├── main.py           # FastAPI app
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── utility_service/
+│       ├── main.py           # FastAPI app
+│       ├── Dockerfile
+│       └── requirements.txt
+│
+└── scripts/                  # Utility scripts (e.g., setup, DB migrations if any)
+
+
+5. Development Plan (Step-by-Step)
+Step 0: Project Setup & Detailed Design (1 day)
+
+
+Tasks: Initialize Git repo, refine directory structure, finalize choices for initial LLM model variant (e.g., llama3:8b-instruct-q4_K_M), define core Pydantic models for state and inter-component communication. Draft basic API contracts for MCPs.
+Deliverable: Initialized project structure, base Pydantic models, refined tech choices.
+Step 1: Infrastructure Setup (2 days)
+
+
+Tasks:
+Create docker-compose.yml for Ollama, Supabase (PostgreSQL + pgvector), and a placeholder JARVIS core service.
+Configure Supabase with pgvector extension. Initialize database schema (e.g., memories table).
+Ensure Ollama is running and the selected Llama3.2 model is pulled (e.g., ollama pull llama3:8b-instruct-q4_K_M).
+Set up .env for managing secrets and configurations.
+Deliverable: Running Docker containers for Ollama and Supabase, accessible locally. Basic JARVIS core container that can start. Documented setup procedure.
+Step 2: Implement Memory Management (3 days)
+
+
+Tasks:
+Develop memory_manager.py module with functions for LTM (CRUD operations in Supabase, embedding generation using Sentence Transformers, semantic search).
+Define how STM (LangGraph AssistantState) will store conversational history.
+Write unit tests for LTM operations with sample data.
+Deliverable: Memory Manager module capable of persisting and retrieving data from Supabase, including semantic search. STM strategy defined.
+Step 3: Build JARVIS Core - Basic Orchestration & Input Parsing (4 days)
+
+
+Tasks:
+Define AssistantState (Pydantic model) for LangGraph workflow state.
+Implement orchestrator.py with a basic LangGraph workflow (e.g., input -> parse -> (placeholder for agent) -> output).
+Integrate Llama3.2 via llm_interface.py for initial input parsing (intent detection, parameter extraction based on predefined tasks).
+Implement basic error handling within the orchestrator.
+Test with sample inputs to ensure basic parsing and routing logic foundation is working.
+Deliverable: Orchestrator capable of parsing simple user commands using Llama3.2 and managing a basic workflow state.
+Step 4: Develop Initial Agents (5 days)
+
+
+Tasks:
+Implement summarization_agent.py (integrates with Llama3.2 for summarization).
+Implement file_search_agent.py (initially for path/name based search; will require File Service MCP later).
+Implement memory_query_agent.py (integrates with memory_manager.py for LTM retrieval).
+Integrate these agents as nodes into the LangGraph workflow with conditional routing based on parsed intent.
+Unit/integration tests for each agent.
+Deliverable: Three functional agents integrated into the LangGraph workflow, capable of handling their respective tasks (some with mocked MCP interactions if MCPs aren't ready).
+Step 5: Create Initial Microservices (MCP Servers) (4 days)
+
+
+Tasks:
+Build file_service/main.py (FastAPI) with endpoints for file read, list directory. Dockerize.
+Build utility_service/main.py (FastAPI) with basic utility endpoints (e.g., get current time). Dockerize.
+Define OpenAPI specs for these services.
+Test MCPs independently.
+Integrate agents (e.g., File Search Agent) with actual MCP calls, replacing any mocks.
+Deliverable: Two Dockerized MCP servers (File, Utility) operational and callable via REST APIs. Agents updated to use live MCPs.
+Step 6: End-to-End Integration, Testing & Refinement (4 days)
+
+
+Tasks:
+Ensure all components (Core, Agents, MCPs, Memory) work together seamlessly.
+Test end-to-end workflows for all defined initial capabilities (e.g., "Summarize path/to/doc.txt and store it in memory", "Search for files named 'report*.txt' in ~/docs").
+Optimize Llama3.2 prompt templates for better accuracy in parsing and agent execution.
+Measure performance against SC1 and SC4.
+Conduct basic stability testing.
+Deliverable: Fully integrated system that passes a defined set of end-to-end test cases. Initial performance and resource usage benchmarks.
+Step 7: Documentation, Final Polish & Review (2 days)
+
+
+Tasks:
+Complete README.md with setup instructions, usage examples, architecture overview, and contribution guidelines (if any).
+Ensure comprehensive code comments, type hints.
+Address any identified minor bugs or performance bottlenecks from Step 6.
+Review codebase for clarity and maintainability.
+Deliverable: Production-ready V1 codebase with comprehensive documentation.
+Total Estimated Duration: ~25 days (assuming 1 dedicated developer, 8-hour days). This includes the added Step 0.
+
+
+6. Example Workflow
+Input: “JARVIS, please summarize the file ~/project_alpha/notes.txt and then search for any other text files in the ~/project_alpha/ directory that were modified in the last week. Store the summary with the tag 'project_alpha_summary'.”
+JARVIS Core (Input Processing):
+Receives the text input.
+Uses Llama3.2 to parse the input, identifying multiple intents and entities:
+Intent 1: Summarize file. Target: ~/project_alpha/notes.txt.
+Intent 2: Search files. Directory: ~/project_alpha/, Type: *.txt, Modified: last 7 days.
+Intent 3: Store memory. Content: (summary from Intent 1), Tag: project_alpha_summary.
+(Optional) The Memory Query Agent might be triggered to see if ~/project_alpha/notes.txt has been summarized recently.
+Orchestrator (LangGraph Workflow):
+Node 1 (File Read for Summary): File Search Agent (or directly File Service MCP via a utility node) reads content of ~/project_alpha/notes.txt.
+Node 2 (Summarization): Summarization Agent receives text content, calls Llama3.2 to generate a summary. Result: summary_text.
+Node 3 (Store Summary): Memory Manager (or an agent using it) stores summary_text in Supabase LTM with tag project_alpha_summary and appropriate metadata.
+Node 4 (File Search): File Search Agent calls File Service MCP to find files in ~/project_alpha/ matching criteria. Result: [file_path1, file_path2].
+JARVIS Core (Response Aggregation):
+Collects results: summary_text (and confirmation of storage), [file_path1, file_path2].
+Output to User: "Okay, I've summarized notes.txt and saved it as 'project_alpha_summary'. Here are the text files in ~/project_alpha/ modified in the last week:
+file_path1
+file_path2"
+7. Future Considerations (Post V1)
+Multi-User Support:
+Extend Supabase schema with robust user_id handling and data isolation/partitioning.
+Implement user authentication and authorization mechanisms (likely if a UI is added).
+Expanded Agent Capabilities:
+Web Search/Scraping Agent: To fetch information from the internet.
+Email Agent: Draft, send, summarize emails (requires secure credential management).
+Calendar Agent: Manage appointments.
+Coding Assistant Agent: (e.g., using a specialized coding LLM like CodeLlama via Ollama).
+Smart Home Control Agent: If applicable hardware and APIs are available.
+Advanced LLM Usage:
+Integrate more specialized LLMs (e.g., Mistral, Phi, etc.) via Ollama and implement more sophisticated model selection logic.
+Fine-tuning local models on user data for personalization (long-term, complex).
+User Interface (UI):
+Develop a FastAPI-based web interface for easier interaction.
+Create a dedicated Command Line Interface (CLI) with history, autocompletion.
+Explore voice input/output capabilities.
+Performance & Efficiency:
+Further LLM quantization (e.g., Q2_K, GGUF k-quants) for devices with very limited resources.
+Caching strategies for frequent LLM queries or MCP responses.
+Batching requests to LLMs or MCPs where appropriate.
+Enhanced Memory & Learning:
+More sophisticated RAG (Retrieval Augmented Generation) techniques.
+Proactive suggestions based on learned patterns and context.
+User feedback mechanisms to improve agent performance and memory relevance.
+Tool Usage & External APIs:
+Standardized framework for agents to use external tools and APIs securely (e.g., ReAct patterns, OpenAI function calling equivalents with local LLMs).
+Management of API keys and user credentials for external services.
+Configuration & Customization:
+A user-friendly way (perhaps via UI) to manage JARVIS settings, agent configurations, and permissions.
+Streaming Responses: For long-running tasks, stream partial results back to the user.
+8. Risks & Mitigation
+R1: LLM Performance & Accuracy:
+Risk: Llama3.2 (even quantized) latency is too high on target consumer hardware, or output quality (parsing, summarization) is insufficient.
+Mitigation:
+Use highly quantized models (e.g., Q4_K_M or explore even smaller ones like 3B if 8B is too slow, if available and suitable).
+Extensive prompt engineering and optimization.
+Implement caching for identical LLM requests.
+Clearly define minimum hardware specifications.
+For accuracy: Use Pydantic for strict validation of LLM outputs for function calls/structured data. Implement RAG for grounding.
+R2: Supabase/Docker Setup Complexity:
+Risk: Users struggle with Docker, Docker Compose, or Supabase pgvector setup.
+Mitigation: Provide very clear, step-by-step docker-compose.yml and setup scripts. Thorough README. Consider a Makefile or helper scripts for common operations (start, stop, logs).
+R3: Agent Coordination & LangGraph Complexity:
+Risk: Bugs in agent interaction logic or state management within LangGraph. Debugging complex graphs can be challenging.
+Mitigation:
+Use Pydantic for strict data contracts between agents/nodes.
+Leverage LangGraph's built-in state tracking and visualization/debugging tools (e.g., get_graph().print_ascii()).
+Implement comprehensive logging within each node.
+Start with simpler workflows and incrementally add complexity.
+R4: Hardware Resource Limitations:
+Risk: The system consumes more resources (RAM, CPU) than anticipated, exceeding the 16GB RAM target.
+Mitigation:
+Regularly profile resource usage during development on target baseline hardware.
+Optimize Python code and LLM/database interactions.
+Provide clear guidance on minimum and recommended hardware.
+R5: Scope Creep:
+Risk: Tendency to add more features during V1 development beyond the defined scope.
+Mitigation: Strict adherence to this PRD for V1. Defer new features to "Future Considerations." Regular review of progress against defined scope.
+R6: Dependency Management & Breaking Changes:
+Risk: Updates to core dependencies (Ollama, LangGraph, Supabase client, Python libraries) introduce breaking changes.
+Mitigation: Pin dependency versions in requirements.txt and Docker images. Test updates in a separate development branch before merging.
+R7: Semantic Search Quality:
+Risk: The chosen embedding model or search strategy for LTM doesn't yield relevant results.
+Mitigation:
+Start with a well-regarded model like all-MiniLM-L6-v2.
+Allow for experimentation with other embedding models.
+Implement and test different retrieval strategies (e.g., hybrid search if pgvector supports it well, tuning similarity thresholds).
+Log retrieved memory chunks to allow for manual inspection and tuning.
+9. Milestones (Aligned with Development Plan)
+M0: Project Kickoff & Design Finalized (End of Day 1)
+Deliverable: Git repo, core Pydantic models, docker-compose.yml structure.
+M1: Infrastructure Operational (End of Day 3 - Step 1)
+Deliverable: Docker containers for Ollama, Supabase running; Llama3.2 model pulled; DB schema initialized.
+M2: Memory Management Foundation (End of Day 6 - Step 2)
+Deliverable: Memory Manager module with LTM CRUD and semantic search capabilities tested.
+M3: Core Orchestrator - Basic Parsing & Routing (End of Day 10 - Step 3)
+Deliverable: JARVIS Core parsing simple commands using Llama3.2 and managing basic LangGraph state.
+M4: Initial Agents Functional (End of Day 15 - Step 4)
+Deliverable: Summarization, File Search (mocked MCP), and Memory Query agents integrated and testable.
+M5: Microservices (MCPs) Operational (End of Day 19 - Step 5)
+Deliverable: File Service and Utility Service MCPs Dockerized, tested, and integrated with relevant agents.
+M6: System Integrated & Tested (End of Day 23 - Step 6)
+Deliverable: Fully integrated JARVIS system passing end-to-end test suite; initial performance benchmarks documented.
+M7: V1 Release Candidate (End of Day 25 - Step 7)
+Deliverable: Production-ready V1 codebase, complete documentation, final review passed.
+10. Sample Docker Compose (docker-compose.yml)
+YAML
+version: "3.8"
+
+services:
+  jarvis-core:
+    build:
+      context: .
+      dockerfile: Dockerfile # Assuming a Dockerfile in the root for jarvis-core
+    volumes:
+      - .:/app # Mounts current directory to /app in container
+    depends_on:
+      ollama:
+        condition: service_started # Or service_healthy if healthcheck is implemented
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "8000:8000" # If JARVIS core exposes an API itself, e.g., for a future UI
+    environment:
+      - PYTHONPATH=/app
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SUPABASE_URL=http://supabase-kong:8000 # Or direct DB URL if not using full Supabase stack
+      - SUPABASE_KEY=${SUPABASE_ANON_KEY} # Example, if using Supabase client library
+      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/${POSTGRES_DB}
+      # Add other ENV VARS for configuration
+    env_file:
+      - .env
+    command: ["python", "core/main.py"] # Example command to start the orchestrator
+
+  ollama:
+    image: ollama/ollama:latest # Consider pinning to a specific version, e.g., 0.1.32
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # For GPU support (optional, ensure Docker and NVIDIA drivers are set up):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+  supabase-db: # Using the official Supabase postgres image
+    image: supabase/postgres:15.1.0.15 # Pin to a specific version
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # from .env
+      - POSTGRES_USER=${POSTGRES_USER}         # from .env
+      - POSTGRES_DB=${POSTGRES_DB}             # from .env
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+      - ./scripts/supabase_init:/docker-entrypoint-initdb.d # For initial SQL scripts (e.g., enable pgvector, create tables)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Example Supabase KONG API Gateway (only if you need full Supabase stack, for pgvector often DB is enough)
+  # supabase-kong:
+  #   image: supabase/kong:latest
+  #   ports:
+  #     - "8000:8000" # Default Supabase port, conflicts if jarvis-core uses 8000
+  #   environment:
+  #     # ... Kong specific ENVs, link to Postgres, GoTrue etc.
+  #   depends_on:
+  #     - supabase-db
+
+  mcp-file-service:
+    build: ./mcp/file_service
+    ports:
+      - "8001:80" # Standard FastAPI port in container is 80
+    volumes:
+      - ./mcp/file_service:/app # For development hot-reloading
+      # Potentially mount specific user directories if file service needs access
+      # - /path/to/user/data:/user_data_mounted
+    environment:
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  mcp-utility-service:
+    build: ./mcp/utility_service
+    ports:
+      - "8002:80"
+    volumes:
+      - ./mcp/utility_service:/app
+    environment:
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  supabase_data:
+
+
+Self-correction: The sample Docker Compose needs a command for jarvis-core if not specified in its Dockerfile. Added an example. Also specified PYTHONPATH and other potential environment variables. Clarified Supabase setup (direct DB vs. full stack).
+Added healthcheck to supabase-db and depends_on conditions for better startup orchestration.
+Added .env file usage.
+Noted that FastAPI default port in containers is often 80, mapped to host ports.
+Added initial SQL script mounting for Supabase.
+11. Conclusion
+This Product Requirements Document outlines the development of JARVIS, a locally-run, scalable AI personal assistant. By leveraging Dockerized Ollama for LLM capabilities, Supabase for persistent long-term memory, and LangGraph for sophisticated agentic orchestration, JARVIS aims to provide a robust platform for task execution and information management for a single user. The initial focus is on core backend functionality, emphasizing a modular architecture with Python to facilitate future expansion, such as multi-user support, diverse agents, and user interfaces. The ~25-day development plan, with clear milestones, sets a realistic path for delivering a V1 with significant capabilities.
+
+This refined PRD should provide even more clarity and a solid roadmap. Remember to create a .env file for your secrets and configurations and add it to your .gitignore! Good luck with Project JARVIS!
+

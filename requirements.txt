@@ -1,0 +1,6 @@
+typing
+pydantic
+langgraph
+ollama
+python-dotenv
+logging
