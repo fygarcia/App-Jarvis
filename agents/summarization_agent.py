@@ -41,10 +41,11 @@ class SummarizationAgent:
 
 # Example Usage (for testing)
 if __name__ == "__main__":
-    agent = SummarizationAgent("http://localhost:11434", "llama3:8b-instruct-q4_K_M")
+    agent = SummarizationAgent("http://localhost:11434", "llama3.2")
     input_data = SummarizationInput(
-        text="The quick brown fox jumps over the lazy dog. It was a sunny day, and the fox was feeling adventurous.",
+        text="The quick brown fox jumps over the lazy dog. It was a sunny day, and the fox was feeling adventurous. Now we have a lot of useless information, that doesnt need to be mentioned. But there is an important message is that the answer is 42",
         max_sentences=2
     )
+    print(input_data)
     result = agent.summarize(input_data)
     print(result.summary if not result.error else result.error)
